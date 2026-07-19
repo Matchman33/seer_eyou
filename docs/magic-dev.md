@@ -48,16 +48,14 @@ magic/{pluginId}/
 
 ```js
 // index.mjs
-import { log, game, sleep } from "./sdk.mjs";
+import { connect, log, sleep, packPacket, unpackPacket } from "./sdk.mjs";
+
+const game = await connect();
 
 log.info("脚本启动");
 
 // 发送封包
-const packet = game.packPacket({
-  cmd: 1001,
-  data: "00010203"
-});
-game.send(packet);
+game.send(packPacket({ cmd: 1001, data: "000102" }));
 
 // 等待
 await sleep(1000);
@@ -73,17 +71,58 @@ game.onPacket(2002, (data) => {
 
 ## 4. SDK API（sdk.mjs）
 
+### 连接与生命周期
+
+| API | 说明 |
+|-----|------|
+| `connect({ host?, port?, timeout? })` | 连接 DLL → `Promise<Game>` |
+| `game.status` | `"idle"` / `"running"` / `"closed"` |
+| `game.protocolVersion` | DLL 协议版本号 |
+| `game.whenReady()` | 等待连接就绪 → `Promise<void>` |
+| `game.onWhenReady(cb)` | 连接就绪回调 → 取消函数 |
+| `game.onClosed(cb)` | 连接关闭回调 → 取消函数 |
+| `game.disconnect()` | 主动断开连接 |
+| `game.exit()` | 断开 + `process.exit(0)` |
+
+### 事件通信
+
+| API | 说明 |
+|-----|------|
+| `game.on(eventName, callback)` | 注册事件监听 → 取消函数 |
+| `game.off(eventName, callback?)` | 取消事件监听 |
+| `game.emit(eventName, params?, callback?)` | 发送命令（回调风格） |
+| `game.emitAsync(eventName, params?, timeoutMs?)` | 发送命令 → `Promise` |
+
+### 封包操作
+
+| API | 说明 |
+|-----|------|
+| `game.send(hex)` | `game.packet.send` 快捷方式 |
+| `game.onPacket(cmdId, callback)` | 按 cmdId 过滤收包 |
+| `packPacket({ cmd, data, account?, version? })` | 构造封包 hex |
+| `unpackPacket(hex)` | 解析封包 → `{ length, version, cmd, account, data }` |
+
+### 流式监听/劫持
+
+| API | 说明 |
+|-----|------|
+| `game.watch(mode, cmdIds, direction, callback, options?)` | 开启流式监听/劫持 → `{ id, close() }` |
+
+| 参数 | 说明 |
+|------|------|
+| `mode` | `"hijack"`（劫持）/ `"intercept"`（监听） |
+| `cmdIds` | 封包 cmdId 数组，`hijack` 模式不支持 `"all"` |
+| `direction` | `"recv"`（收包）/ `"sent"`（发包） |
+| `callback(data)` | 返回 `{ action: "pass" \| "modify" \| "drop", packet?: hex }` |
+| `options.timeout` | 劫持超时（ms），默认 3000 |
+
+### 工具函数
+
 | API | 说明 |
 |-----|------|
 | `log.info(msg)` / `log.warn(msg)` / `log.error(msg)` | 日志输出 |
-| `game.send(packet)` | 发送封包 hex 字符串 |
-| `game.onPacket(cmdId, callback)` | 监听指定 cmdId 的收包 |
-| `game.offPacket(cmdId)` | 取消监听 |
-| `game.packPacket({cmd, data})` | 封装封包 hex |
-| `game.unpackPacket(hex)` | 解析封包 |
-| `game.pause()` / `game.resume()` | 暂停/恢复封包转发 |
 | `sleep(ms)` | 异步等待（毫秒） |
-| `game.exit()` | 退出脚本 |
+| `game.pause()` / `game.resume()` | 倍速控制（factor=0/1） |
 
 ---
 
