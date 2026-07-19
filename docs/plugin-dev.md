@@ -36,7 +36,6 @@ plugins/{pluginId}/
   "author": "lx",
   "tags": ["示例", "工具"],
   "entry": "index.js",
-  "minHostVersion": "2.0",
   "priority": 0,
   "dependencies": ["com.lx.command"],
 
@@ -97,7 +96,6 @@ plugins/{pluginId}/
 | `author` | string | `""` | 作者名 |
 | `tags` | string[] | `[]` | 标签列表 |
 | `entry` | string | `"index.js"` | JS 入口文件名 |
-| `minHostVersion` | string | — | 最低宿主版本（semver） |
 | `priority` | int | `0` | 菜单排序优先级（越大越靠前） |
 | `dependencies` | string[] | `[]` | 依赖的其他插件 ID 列表 |
 
@@ -253,51 +251,86 @@ ctx.log.error(...args)  // error 级别日志
 
 ### 4.4 game
 
-```ts
-// 获取 DLL 通信客户端（同步，立即返回——TCP 连接需显式调用 connect()）
-const client = ctx.game.getClient(port?, ip?);
-// 返回: { on, emit, off, connect, disconnect, whenReady, onWhenReady, onClosed, status }
+上接 game API 基础说明
 
-client.on(eventName, callback)            // 注册 DLL 事件监听，返回取消函数；同事件支持多个插件回调
-client.emit(eventName, params, callback?)  // 向 DLL 发送命令（未连接时自动 connect）
-client.off(eventName, callback?)           // 取消指定回调或该事件的全部回调
-client.watch(mode, cmds, direction, callback, options?) // 精准监听/劫持封包
-client.connect()                           // 显式建立 TCP 连接
-client.disconnect()                        // 断开连接（同时停止重连）
-client.whenReady()                         // Promise<void>，等待连接就绪
-client.onWhenReady(cb)                     // 连接就绪回调，返回取消注册函数
-client.onClosed(cb)                        // 连接关闭回调，返回取消注册函数
-client.status                              // "idle" | "connecting" | "running" | "closed"
 
-// 封包工具
-ctx.game.packPacket(params)    // Packet → hex string
-ctx.game.unpackPacket(hex)     // hex string → Packet
-```
+### 4.4.1 `game.on` / `game.emit` — 事件发布订阅
 
-> **注意**：`getClient()` 是同步方法，立即返回，不阻塞主线程。TCP 连接需要显式调用 `client.connect()` 触发（或通过 `emit()` 自动连接）。插件在 `onEnable` 中可安全调用 `getClient()` + `on()` 注册监听器，不会触发连接。
->
-> 典型用法：
-> ```js
-> const client = ctx.game.getClient();
-> client.on("game.packet.recv", handler);
-> client.onWhenReady(() => ctx.log.info("游戏已连接"));
-> client.onClosed(() => ctx.log.info("游戏已断开"));
-> // 用户点击"连接游戏"按钮时触发
-> client.connect();
-> await client.whenReady();
-> ```
+`game.on` 和 `game.emit` 是插件间通信和与 DLL 交互的核心机制，遵循**发布-订阅**模式：
 
-**Packet 结构**：
-```ts
-type Packet = {
-  length: number;    // 封包总长度
-  version: number;   // 协议版本
-  cmd: number;       // 命令号
-  account: number;   // 账号
-  checksum: number;  // 校验和
-  data: string;      // 封包体 hex
+| API | 方向 | 说明 |
+|-----|------|------|
+| `game.on(eventName, callback)` | 订阅 | 监听指定事件，返回取消函数 |
+| `game.emit(eventName, params, callback?)` | 发布 | 发送事件/命令，可带回调获取返回值 |
+
+**对应关系**：同一 `eventName` 的 `emit` 和 `on` 一一对应。`emit` 发送的消息会被所有注册了相同 `eventName` 的 `on` 回调接收到。多个插件可以同时监听同一个事件，彼此隔离。
+
+**跨插件通信**：A 插件 `emit("myEvent", data)`，B 插件通过 `on("myEvent", handler)` 即可接收。事件名建议使用 `插件ID.事件名` 避免冲突，如 `com.lx.packet_hijacker.rulesUpdated`。
+
+**DLL 通信**：`emit` 发往 DLL 的命令会自动通过 TCP 发送，DLL 的推送事件通过 `on` 接收。常用 DLL 事件：
+
+| eventName | 方向 | 说明 |
+|-----------|------|------|
+| `game.packet.recv` | DLL→插件 | 收到游戏封包 |
+| `game.packet.sent` | DLL→插件 | 发出游戏封包 |
+| `game.login` | DLL→插件 | 游戏登录 |
+| `game.logout` | DLL→插件 | 游戏登出 |
+| `game.packet.send` | 插件→DLL | 向游戏发送封包 |
+| `game.speed.set` | 插件→DLL | 设置游戏倍速 |
+| `game.refresh` | 插件→DLL | 重置游戏状态 |
+
+**示例 — 跨插件协作**：
+
+```js
+// 插件 A (com.lx.auto_battle)：发布战斗结果
+module.exports = {
+  lifecycle: {
+    onEnable: async (ctx) => {
+      const client = ctx.game.getClient();
+      client.on("game.packet.recv", (data) => {
+        if (data.cmd === 5001) {
+          // 战斗结束，通知其他插件
+          client.emit("com.lx.auto_battle.result", { win: true, exp: 1200 });
+        }
+      });
+    },
+  },
+};
+
+// 插件 B (com.lx.log_viewer)：订阅战斗结果
+module.exports = {
+  lifecycle: {
+    onEnable: async (ctx) => {
+      const client = ctx.game.getClient();
+      client.on("com.lx.auto_battle.result", (data) => {
+        ctx.log.info(`战斗结果: ${JSON.stringify(data)}`);
+        // win: true, exp: 1200
+      });
+    },
+  },
 };
 ```
+
+**示例 — 多层封装**：
+
+```js
+// 业务层封装
+function watchBattleEnd(ctx, handler) {
+  const client = ctx.game.getClient();
+  return client.on("game.packet.recv", (data) => {
+    if (data.cmd === 5001) {
+      const result = parseBattleResult(data);
+      handler(result);
+    }
+  });
+}
+
+// 使用
+const unsub = watchBattleEnd(ctx, (result) => {
+  if (result.win) ctx.log.info(`战斗胜利，获得 ${result.exp} 经验`);
+});
+```
+
 
 ### 4.5 ui
 
@@ -652,31 +685,37 @@ module.exports = {
 </html>
 ```
 
-### 6.3 封包劫持器（连接 DLL，支持收发双劫持）
+### 6.3 封包劫持器（watch 方案）
 
-完整实现参见 `plugins/com.lx.packet_hijacker/`，每条规则包含 `direction` 字段（`"recv"` 或 `"sent"`）。核心流程：
+新版使用 `client.watch()` 替代旧的 `intercept.start/stop` 命令。`watch` 直接向 DLL 注册流式监听，无需逐个手动回复。
 
+```ts
+const client = ctx.game.getClient();
+await client.whenReady();
+
+// 收包劫持：拦截 cmdId 1001 和 2002，30 秒内未响应自动放行
+const watcher = await client.watch(
+  "hijack",
+  [1001, 2002],
+  "recv",
+  (data) => {
+    // 返回 { action: "pass" | "modify" | "drop", packet?: hex }
+    return { action: "pass" };
+  },
+  { timeout: 30000 }
+);
+
+// 停止劫持
+await watcher.close();
 ```
-1. UI 通过 window.$game.getClient() 获取 DLL 连接代理
-2. 用户添加规则时指定方向（收包/发包）
-3. 点击"启动劫持" → 同时注册两个事件监听 + 发送两个 start 命令：
 
-   // 收包劫持
-   game.on("game.packet.recv.intercepted", (data) => {
-     game.emit("intercept.response", { id, action, packet? });
-   });
-   game.emit("intercept.start", { cmds: recvCmdIds, timeout: 10000 });
+| mode | 说明 |
+|------|------|
+| `"hijack"` | 劫持模式：拦截封包，等待客户端响应后决定放行/修改/丢弃 |
+| `"intercept"` | 监听模式：只观察封包，不影响游戏流程 |
 
-   // 发包劫持
-   game.on("game.packet.sent.intercepted", (data) => {
-     game.emit("sentIntercept.response", { id, action, packet? });
-   });
-   game.emit("sentIntercept.start", { cmds: sentCmdIds, timeout: 10000 });
+`direction` 字段：`"recv"`（收包）/ `"sent"`（发包）。
 
-4. 点击"停止劫持" → 同时发送两个 stop 命令 + 取消订阅
-```
-
-> ⚠️ **时序注意**：`game.on()` 在 `game.emit("intercept.start")` 之前调用（均在用户点击按钮时），此时 TCP 连接已就绪。不需要在页面加载时提前注册监听。
 
 ---
 

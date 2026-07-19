@@ -1,4 +1,4 @@
-# DLL 端架构文档
+﻿# DLL 端架构文档
 
 > seer_eyou_hook — 游戏进程注入 DLL，基于 Microsoft Detours 实现 API Hook，通过 TCP 3000 端口对外暴露 JSON 帧协议接口。
 
@@ -156,59 +156,11 @@ Client → DLL: {"type":"emit","eventName":"_protocol_version","data":{"version"
 响应: {"type":"return","data":{"success":true,"data":{"factor":2.0}}}
 ```
 
-### 4.5 intercept.start
+### 4.5 watch 流式监听（替代旧 intercept）
 
-启动封包劫持。传入 cmdId 白名单，只劫持匹配的接收封包。空数组不启动（返回错误）。
+新版客户端通过 `client.watch()` 统一处理收包和发包的监听/劫持。DLL 端对应 `watch.open` / `watch.packet` / `watch.close` 协议事件。
 
-```
-请求: {"type":"emit","eventName":"intercept.start","data":{"cmds":[1001,2002],"timeout":3000}}
-响应: {"type":"return","data":{"success":true,"data":{"cmds":[1001,2002],"timeout":3000}}}
-```
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `cmds` | int[] | 必填 | 要劫持的 cmdId 白名单 |
-| `timeout` | int | 3000 | 客户端响应超时(ms) |
-
-### 4.6 intercept.stop
-
-停止所有劫持，清除白名单和响应记录。
-
-```
-请求: {"type":"emit","eventName":"intercept.stop","data":{}}
-响应: {"type":"return","data":{"success":true}}
-```
-
-### 4.7 intercept.response
-
-对劫持到的封包做出响应。
-
-```
-请求: {"type":"emit","eventName":"intercept.response","data":{"id":"req_12345","action":"modify","packet":"..."}}
-```
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `id` | string | 劫持事件返回的 id |
-| `action` | `"pass"` \| `"modify"` \| `"drop"` | pass=放行, modify=修改, drop=丢弃 |
-| `packet` | string? | action=modify 时必填，修改后的封包 hex |
-
-### 4.8 sentIntercept.start
-
-启动发包劫持。传入 cmdId 白名单，只劫持匹配的发送封包。与收包劫持 `intercept.start` 完全平行。
-
-```
-请求: {"type":"emit","eventName":"sentIntercept.start","data":{"cmds":[1001,2002],"timeout":5000}}
-响应: {"type":"return","data":{"success":true,"data":{"cmds":[1001,2002],"timeout":5000}}}
-```
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `cmds` | int[] | 必填 | 要劫持的 cmdId 白名单 |
-| `timeout` | int | 3000 | 客户端响应超时(ms) |
-
-**冲突检测**：若 cmdId 已被其他连接注册，返回 `{"success":false,"error":"cmdId xxx already registered"}`。
-同一连接重复调用会覆盖之前的注册。
+> **已废弃**：`intercept.start` / `intercept.stop` / `intercept.response` / `sentIntercept.start` / `sentIntercept.response` 命令已不再使用。
 
 ### 4.9 sentIntercept.stop
 
