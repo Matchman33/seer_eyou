@@ -62,6 +62,8 @@ seer_eyou_client/
 ## 3. 启动流程
 
 ```
+app.requestSingleInstanceLock()
+app.on("second-instance")
 app.on("ready")
   → LogBus.getInstance()
   → PluginManager.getInstance("plugins")  // 单例
@@ -273,7 +275,7 @@ class SeerWindow {
 | `$settings` | 部分直连 + IPC | 游戏路径/Mod 注入/启动游戏 |
 | `$magic` | preload 直连 | 魔法脚本文件操作（读写/保存/运行） |
 
-详见 [插件开发指南](./PLUGIN-DEV-GUIDE.md#前端-apiwindowxxx)。
+详见 [插件开发指南](./docs/plugin-dev.md#前端-apiwindowxxx)。
 
 ---
 
@@ -321,13 +323,22 @@ class SeerWindow {
 
 ---
 
+
 ## 5. 主窗口
 
-主窗口加载 `http://localhost:5175/`（plugin-manager-ui 的 Vite dev server）。
+主窗口 URL 根据运行环境自动切换：
+
+| 环境 | URL | 说明 |
+|------|-----|------|
+| 开发 (
+pm start) | http://localhost:5175/ | 连接 plugin-manager-ui 的 Vite dev server |
+| 生产（打包后） | ile://resources/ui/index.html | 加载本地构建产物 |
+
+打包时 plugin-manager-ui/dist/ 通过 extraResources 复制到 esources/ui/。
 
 快捷键：
-- `F5` → 刷新主窗口
-- `F12` → 打开/关闭 DevTools
+- F5 → 刷新主窗口
+- F12 → 打开/关闭 DevTools
 
 ---
 
