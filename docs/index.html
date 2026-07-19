@@ -1,0 +1,151 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="易游插件管理器 — 赛尔号游戏辅助工具，插件化架构，支持封包拦截、魔法脚本、一键日常" />
+  <title>易游插件管理器</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #1a1a2e; line-height: 1.6; }
+    a { color: #2b579a; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 40%, #0f3460 100%);
+      color: #fff;
+      text-align: center;
+      padding: 80px 24px 60px;
+    }
+    .hero h1 { font-size: 42px; font-weight: 700; margin-bottom: 12px; }
+    .hero .tagline { font-size: 18px; opacity: 0.85; margin-bottom: 32px; }
+    .hero .badges { display: flex; justify-content: center; gap: 16px; flex-wrap: wrap; }
+    .badge {
+      display: inline-block; padding: 8px 20px; border-radius: 20px;
+      font-size: 14px; font-weight: 500; transition: transform 0.2s;
+    }
+    .badge:hover { transform: translateY(-2px); }
+    .badge-primary { background: #2b579a; color: #fff; }
+    .badge-outline { border: 1px solid rgba(255,255,255,0.4); color: #fff; }
+
+    .section { max-width: 960px; margin: 0 auto; padding: 60px 24px; }
+    .section h2 { font-size: 28px; margin-bottom: 32px; text-align: center; }
+
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; }
+    .feature-card {
+      background: #f6f8fa; border-radius: 12px; padding: 28px 24px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .feature-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    .feature-card .icon { font-size: 32px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 17px; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: #586069; }
+
+    .download-card {
+      background: linear-gradient(135deg, #2b579a, #1a3a6a);
+      color: #fff; border-radius: 12px; padding: 40px; text-align: center;
+    }
+    .download-card h2 { color: #fff; }
+    .download-card p { opacity: 0.9; margin-bottom: 20px; }
+    .btn-download {
+      display: inline-block; padding: 14px 40px; background: #fff; color: #1a1a2e;
+      border-radius: 8px; font-size: 16px; font-weight: 600; border: none; cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn-download:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.2); text-decoration: none; }
+
+    .docs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .doc-card {
+      border: 1px solid #e1e4e8; border-radius: 10px; padding: 24px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .doc-card:hover { border-color: #2b579a; box-shadow: 0 4px 12px rgba(43,87,154,0.1); }
+    .doc-card h3 { font-size: 16px; margin-bottom: 6px; }
+    .doc-card p { font-size: 13px; color: #586069; }
+
+    footer {
+      text-align: center; padding: 32px 24px; font-size: 13px;
+      color: #586069; border-top: 1px solid #e1e4e8;
+    }
+    footer a { color: #2b579a; }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <h1>🔮 易游插件管理器</h1>
+    <p class="tagline">赛尔号游戏辅助工具 — 插件化架构，封包拦截 · 魔法脚本 · 一键日常</p>
+    <div class="badges">
+      <a class="badge badge-primary" href="https://github.com/Matchman33/seer_eyou/releases/latest">📥 下载最新版</a>
+      <a class="badge badge-outline" href="#docs">📖 开发文档</a>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <h2>✨ 核心功能</h2>
+    <div class="features">
+      <div class="feature-card">
+        <div class="icon">🧩</div>
+        <h3>插件系统</h3>
+        <p>热加载插件，支持安装/卸载/启用/禁用，每个插件独立窗口运行。内置插件市场，一键下载安装。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📡</div>
+        <h3>封包拦截</h3>
+        <p>实时拦截游戏收发包，支持查看、修改、丢弃、劫持。精准匹配 cmdId，自定义处理逻辑。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">✨</div>
+        <h3>魔法脚本</h3>
+        <p>用 JavaScript 编写自定义脚本，支持 fork 子进程运行。内置编辑器，语法高亮、一键运行。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">⚡</div>
+        <h3>倍速控制</h3>
+        <p>Hook 系统时间 API，自由调整游戏运行速度。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📋</div>
+        <h3>一键日常</h3>
+        <p>配置每日任务列表，定时自动执行。支持所有插件 onDaily 生命周期。</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔄</div>
+        <h3>自动更新</h3>
+        <p>启动时静默检测新版本，自动下载安装，无需手动操作。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="download-card">
+      <h2>📥 立即下载</h2>
+      <p>支持 Windows 7+，选择自定义安装路径</p>
+      <a class="btn-download" href="https://github.com/Matchman33/seer_eyou/releases/latest">下载最新版本</a>
+    </div>
+  </section>
+
+  <section class="section" id="docs">
+    <h2>📖 开发文档</h2>
+    <div class="docs-grid">
+      <a href="https://github.com/Matchman33/seer_eyou/blob/main/docs/plugin-dev.md" class="doc-card" style="display:block">
+        <h3>🧩 插件开发指南</h3>
+        <p>manifest.json 规范 · index.js 生命周期 · PluginContext API · 菜单/快捷键配置 · 窗口管理</p>
+      </a>
+      <a href="https://github.com/Matchman33/seer_eyou/blob/main/docs/magic-dev.md" class="doc-card" style="display:block">
+        <h3>✨ 魔法脚本指南</h3>
+        <p>脚本目录结构 · manifest.json · SDK API · 封包收发 · 运行与调试</p>
+      </a>
+      <a href="https://github.com/Matchman33/seer_eyou/blob/main/CLIENT-ARCHITECTURE.md" class="doc-card" style="display:block">
+        <h3>🏗 客户端架构</h3>
+        <p>技术栈 · 项目结构 · 核心模块 · IPC 通信 · 数据流</p>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    <p>© 2024 matchman33 · Powered by <a href="https://github.com/Matchman33/seer_eyou">GitHub</a></p>
+  </footer>
+
+</body>
+</html>
