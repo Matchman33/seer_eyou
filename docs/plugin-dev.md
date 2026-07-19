@@ -332,6 +332,61 @@ const unsub = watchBattleEnd(ctx, (result) => {
 ```
 
 
+
+### 4.4.2 DLL 事件参考
+
+DLL 通过 TCP 推送的 JSON 事件，使用 client.on(eventName, callback) 订阅。
+
+**DLL 推送事件**：
+
+| eventName | data | 说明 |
+|-----------|------|------|
+| game.login | { userId: number } | 游戏登录成功 |
+| game.logout | { userId: number } | 游戏登出 |
+| game.packet.recv | { packet, cmdId, userId, length } | 收到游戏封包 |
+| game.packet.sent | { packet, cmdId, userId, length } | 发出游戏封包 |
+| _protocol_version | { version: number } | 握手协议版本 |
+
+**客户端命令**：
+
+| eventName | 参数 | 说明 |
+|-----------|------|------|
+| game.refresh | {} | 重置游戏状态 |
+| game.status | {} | 查询游戏状态 |
+| game.packet.send | { packet } | 发送封包到服务器 |
+| game.speed.set | { factor } | 设置倍速 |
+| watch.open | { mode, cmds, direction, timeout? } | 开启流式监听/劫持 |
+| watch.close | { id } | 关闭流式监听 |
+
+**已废弃**：intercept.start / intercept.stop / intercept.response / sentIntercept.* 已由 watch 替代。game.packet.recv.intercepted 和 game.packet.sent.intercepted 仅保留兼容。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ### 4.5 ui
 
 ```ts
@@ -496,44 +551,10 @@ await watcher.close();
 - `watch("hijack", "all", ...)` 明确禁止。
 
 
-### 5.2.1 发包劫持（sentIntercept）
+### 5.2.1 封包监听/劫持（watch）
 
-与收包劫持平行的发包劫持命令和事件：
+新版统一使用 client.watch() 替代旧的 intercept/sentIntercept 命令。详见 4.4.2 节和 6.3 节。
 
-**命令**：
-
-| 命令 | 参数 | 说明 |
-|------|------|------|
-| `sentIntercept.start` | `{ cmds: number[], timeout?: number }` | 启动发包劫持，cmds 为白名单 cmdId |
-| `sentIntercept.stop` | `{}` | 停止发包劫持 |
-| `sentIntercept.response` | `{ id: string, action: "pass"\|"modify"\|"drop", packet?: string }` | 响应发包劫持事件 |
-
-**监听事件**：
-
-| 事件 | data | 说明 |
-|------|------|------|
-| `game.packet.sent.intercepted` | `{ id, cmdId, length, packet }` | 被劫持的发包 |
-
-| 命令 | 参数 | 说明 |
-|------|------|------|
-| `intercept.start` | `{ cmds: number[], timeout?: number }` | 启动劫持，cmds 为白名单 cmdId |
-| `intercept.stop` | `{}` | 停止所有劫持 |
-| `intercept.response` | `{ id: string, action: "pass"\|"modify"\|"drop", packet?: string }` | 响应劫持封包 |
-
-**监听事件**：
-
-| 事件 | data | 说明 |
-|------|------|------|
-| `game.packet.recv` | `{ packet, cmdId, userId, length }` | 收到的封包 |
-| `game.packet.recv.intercepted` | `{ id, cmdId, length, packet }` | 被劫持的封包 |
-
-**劫持行为说明**：
-
-- **明确 drop**：游戏收到伪造封包（cmdId=109，21 字节），不 emit "game.packet.recv"
-- **超时**：游戏收到原始封包，仍 emit "game.packet.recv"
-- **modify**：游戏收到修改后的封包
-
-> ⚠️ **时序注意**：连接是懒加载的。`getClient()` 立即返回，`on()` 只注册监听器，不触发连接。首次 `emit()` 会自动 `connect()` 并排队消息，连接就绪后自动发送。如需确保连接就绪，可先 `await game.whenReady()`。
 
 ### 5.3 $log
 
