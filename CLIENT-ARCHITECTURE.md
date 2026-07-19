@@ -13,6 +13,7 @@
 | 模块系统 | CommonJS |
 | 编译 | `tsc` → `dist/` |
 | 打包 | electron-builder + NSIS |
+| 自动更新 | electron-updater + GitHub Releases |
 
 ---
 
@@ -26,7 +27,9 @@ seer_eyou_client/
 ├── tsconfig.json                    ← TypeScript 配置（outDir: dist）
 ├── package.json
 ├── src/
-│   ├── preload.ts                   ← 预加载脚本（暴露 window.$xxx API）
+│   ├── preload.ts                   ← 预加载入口（聚合所有 API 模块）
+│   ├── preload/                              ← 预加载子模块（7 个文件）
+│   │   ├── shared.ts / game.ts / magic.ts / log.ts / plugin.ts / settings.ts
 │   ├── ipc/
 │   │   ├── gameClient.ts            ← TCP 客户端（连接 DLL，\\n 分隔帧协议）
 │   │   ├── gameHandlers.ts           ← 游戏通信 IPC 桥接（渲染进程代理）
