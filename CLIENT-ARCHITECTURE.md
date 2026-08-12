@@ -29,7 +29,7 @@ seer_eyou_client/
 ├── src/
 │   ├── preload.ts                   ← 预加载入口（聚合所有 API 模块）
 │   ├── preload/                              ← 预加载子模块（7 个文件）
-│   │   ├── shared.ts / game.ts / magic.ts / log.ts / plugin.ts / settings.ts
+│   │   ├── shared.ts / game.ts / log.ts / plugin.ts / settings.ts / storage.ts / auth.ts
 │   ├── ipc/
 │   │   ├── gameClient.ts            ← TCP 客户端（连接 DLL，\\n 分隔帧协议）
 │   │   ├── gameHandlers.ts           ← 游戏通信 IPC 桥接（渲染进程代理）
@@ -42,16 +42,14 @@ seer_eyou_client/
 │       ├── logBus.ts                ← 日志总线（环形缓冲 500 条）
 │       ├── seerWindows.ts           ← BrowserWindow 封装
 │       ├── packetUtils.ts           ← 封包解包/打包工具
-│       └── fileUtils.ts             ← 魔法脚本文件管理
+│       └── safeUnzip.ts             ← zip 安全解压
 ├── plugins/                         ← 插件目录（每个插件一个子目录）
 │   ├── .data/plugin_states.json     ← 插件禁用状态持久化
 │   ├── .storage/{id}.json           ← 每个插件的 kv 存储
-│   ├── com.lx.seer_magic/           ← 魔法编辑器
 │   ├── com.lx.packet_interceptor/   ← 封包拦截器
 │   ├── com.lx.log_viewer/           ← 日志查看器
 │   ├── com.lx.command/              ← 内置命令封装
 │   └── com.lx.packet_hijacker/      ← 封包劫持器
-├── magic/                           ← 魔法脚本目录
 ├── dll/                             ← DLL 文件（baselib.dll, gameServer.dll）
 ├── .data/                           ← 应用数据（daily_tasks.json 等）
 └── release/                         ← 文档
@@ -265,15 +263,15 @@ class SeerWindow {
 
 ### 4.5 预加载脚本（`src/preload.ts`）
 
-通过 `contextBridge.exposeInMainWorld` 暴露 5 个 API 到渲染进程：
+通过 `contextBridge.exposeInMainWorld` 暴露 6 个 API 到渲染进程：
 
 | API | 暴露方式 | 用途 |
 |-----|---------|------|
 | `$game` | IPC 桥接 | DLL 通信、封包解包、插件存储（通过 gameHandlers 代理主进程单例） |
-| `$plugin` | IPC → 主进程 | 插件安装/卸载/启用/禁用/魔法列表/日常 |
+| `$plugin` | IPC → 主进程 | 插件安装/卸载/启用/禁用/内置插件/日常 |
 | `$log` | IPC → 主进程 | 日志读写、订阅推送 |
 | `$settings` | 部分直连 + IPC | 游戏路径/Mod 注入/启动游戏 |
-| `$magic` | preload 直连 | 魔法脚本文件操作（读写/保存/运行） |
+| `$storage` | preload 直连 | 插件上下文存储（plugins/.storage/{id}.json） |
 
 详见 [插件开发指南](./docs/plugin-dev.md#前端-apiwindowxxx)。
 
@@ -310,7 +308,7 @@ class SeerWindow {
 | `plugin:enable/disable/open/uninstall` | invoke | 转调 pluginManager 对应方法 |
 | `plugin:runDaily` | invoke | 转调 `pluginManager.runDailyPlugin()` |
 
-**magic 安装逻辑**：如果 `manifest.type === "magic"`，解压到 `magic/{pluginId}/` 目录，不调用 pluginManager 生命周期。
+**安装逻辑**：仅支持 `type=plugin` 的 zip，解压到 `plugins/{pluginId}/` 并加载（魔法已移除）。
 
 #### settingsHandlers.ts
 

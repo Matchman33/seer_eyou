@@ -86,7 +86,7 @@ plugins/{pluginId}/
 | `id` | string | 全局唯一标识，如 `com.author.name` |
 | `name` | string | 显示名称 |
 | `version` | string | 语义化版本号 |
-| `type` | `"magic"` \| `"plugin"` | 插件类型（magic=脚本, plugin=插件） |
+| `type` | `"plugin"` | 插件类型 |
 
 #### 可选字段
 
@@ -436,10 +436,6 @@ const list: Array<{
   enabled: boolean; dir: string; hasUi: boolean;
 }> = await window.$plugin.getInstalled();
 
-// 获取本地魔法脚本列表
-const magicList = await window.$plugin.getMagicScripts();
-// 返回: [{ id, name, version, description, author, tags, enabled, dir, entry, hasUi }]
-
 // 从云端 URL 下载并安装
 const { success, pluginId } = await window.$plugin.installFromUrl("http://...");
 
@@ -579,20 +575,6 @@ await window.$settings.launchGame();
 await window.$settings.injectMod();
 await window.$settings.restoreMod();
 const { injected } = window.$settings.checkModStatus();
-```
-
-### 5.5 $magic
-
-```ts
-// 魔法脚本文件操作
-await window.$magic.saveSeerjsFile(pluginId, fileName, content);
-const content = await window.$magic.readSeerjsFile(pluginId, fileName);
-const files = await window.$magic.readSeerjsFiles(pluginId);
-await window.$magic.deleteSeerjsFile(pluginId, fileName);
-await window.$magic.renameSeerjsFile(pluginId, oldName, newName);
-
-// 运行魔法脚本（fork 子进程）
-const result = await window.$magic.runScript(scriptPath, args?);
 ```
 
 ---
