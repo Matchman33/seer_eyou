@@ -339,9 +339,8 @@ const res = await ctx.game.req("command.request", { cmdId: 1001, body: "..." });
 ```js
 // 其他插件调用：
 const res = await ctx.game.req("command.request", {
-  cmdId: 1001,              // 请求命令号
-  body: "0000...",          // 请求 body（hex 字符串）
-  options: { timeout: 5000 },
+  packet: "0000003F310000B8EC36605D75000001000000...",  // 完整请求封包（hex）
+  options: { timeout: 5000 },  // 可选，默认 5000
 });
 // res.value = { cmdId, length, userId, result, body, raw }
 //   result 非 0 = 游戏侧错误，仍正常返回由调用方判断
