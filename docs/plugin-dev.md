@@ -316,13 +316,13 @@ type Result<T = any> = { ok: boolean; value: T | null; error: { code: string; me
 
 ```js
 // 插件 A：注册事件处理器（暴露"接口"）
-const unsub = ctx.game.on("command.request", async (payload) => {
+const unsub = ctx.game.on("someEvent", async (payload) => {
   // ...处理并返回结果
-  return { cmdId: payload.cmdId, result: 0, body: "..." };
+  return { code: 0, data: payload };
 });
 
 // 插件 B：发布并获取第一个订阅者的返回值（哪怕 undefined）
-const res = await ctx.game.req("command.request", { cmdId: 1001, body: "..." });
+const res = await ctx.game.req("someEvent", { hello: "world" });
 // res.value = 第一个订阅者的返回值（未定义则返回 undefined，ok 仍为 true）
 ```
 
