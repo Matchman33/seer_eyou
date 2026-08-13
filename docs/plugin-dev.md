@@ -283,9 +283,9 @@ type GameAPI = {
   onClosed(cb): () => void;                // 连接从 ready 掉线（重连前间隙）
   onReady(cb): () => void;                 // 每次就绪（含重连）触发，返回取消函数
   readonly status: "idle" | "connecting" | "ready" | "closed";
-  on(topic, cb): () => void;               // 订阅事件，自动管理 sub，返回退订函数
+  on(topic, cb): () => void;               // 注册事件订阅者（跨插件多订阅者；game.* 由宿主转发 DLL 推送），返回退订函数
   off(topic, cb?): void;                   // 退订
-  req(topic, data?, timeout?): Promise<Result>;  // 命令/触发，统一 Result { ok, value, error }
+  req(topic, data?, timeout?): Promise<Result>;  // 发布：本地有订阅者→调用全部并返回第一个返回值；否则走 DLL 命令
   streamOpen(filter, onData?): Promise<PacketStream>; // 打开监听/劫持流
 };
 
@@ -309,6 +309,43 @@ type Result<T = any> = { ok: boolean; value: T | null; error: { code: string; me
 | `game.packet.send` | `{ packet }` | 发送封包（hex） |
 | `game.speed.set` | `{ factor }` | 设置倍速 |
 | `game.refresh` | `{}` | 重置游戏状态 |
+
+#### 跨插件多订阅者（on / req）
+
+`topic` 只是**事件名**，与插件无关。任何插件都能 `on` 同名事件，发布时**全部被调用**（多订阅者模式）：
+
+```js
+// 插件 A：注册事件处理器（暴露"接口"）
+const unsub = ctx.game.on("command.request", async (payload) => {
+  // ...处理并返回结果
+  return { cmdId: payload.cmdId, result: 0, body: "..." };
+});
+
+// 插件 B：发布并获取第一个订阅者的返回值（哪怕 undefined）
+const res = await ctx.game.req("command.request", { cmdId: 1001, body: "..." });
+// res.value = 第一个订阅者的返回值（未定义则返回 undefined，ok 仍为 true）
+```
+
+- `on(topic, handler)`：注册订阅者；`game.*` 前缀是 DLL 事件（宿主自动订阅 DLL 并转发推送）。
+- `req(topic, data)`：先查本地订阅者——有则并发调用全部，返回**第一个订阅者的返回值（哪怕 undefined）**；无订阅者则回退到 DLL 命令（`game.*`）。
+- 不 `await` 的 `req` 即"发送不管"（fire-and-forget）。
+- `game.*` 为 DLL 保留命名空间，插件事件请使用非 `game.*` 的事件名（建议 `业务.事件`，如 `command.request`）。
+- **无权限 caps**：auth 通过即可访问插件全部能力，不存在能力限制。
+
+#### command 插件示例（请求-响应接口）
+
+内置 `command` 插件（`com.matchman33.command`）通过 `on` 暴露"向游戏发送指定 cmdId 并同步等待响应"的接口：
+
+```js
+// 其他插件调用：
+const res = await ctx.game.req("command.request", {
+  cmdId: 1001,              // 请求命令号
+  body: "0000...",          // 请求 body（hex 字符串）
+  options: { timeout: 5000, respCmdId: 1001 },
+});
+// res.value = { cmdId, length, userId, result, body, raw }
+//   result 非 0 = 游戏侧错误，仍正常返回由调用方判断
+```
 
 #### 监听 / 劫持流（streamOpen）
 
