@@ -341,10 +341,11 @@ const res = await ctx.game.req("command.request", { cmdId: 1001, body: "..." });
 const res = await ctx.game.req("command.request", {
   cmdId: 1001,              // 请求命令号
   body: "0000...",          // 请求 body（hex 字符串）
-  options: { timeout: 5000, respCmdId: 1001 },
+  options: { timeout: 5000 },
 });
 // res.value = { cmdId, length, userId, result, body, raw }
 //   result 非 0 = 游戏侧错误，仍正常返回由调用方判断
+//   响应匹配：游戏固定返回与请求同号的响应 cmdId
 ```
 
 #### 监听 / 劫持流（streamOpen）
