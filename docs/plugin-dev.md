@@ -20,6 +20,9 @@ plugins/{pluginId}/
 - `manifest.json` **必填**（缺失则加载失败）；`index.cjs` 提供 `lifecycle` / `commands`
 - `ui` / `menu` / `shortcuts` 可在 manifest 与入口文件中同时声明，**manifest.json 优先**
 - 推荐入口文件使用 `index.cjs` 扩展名（CommonJS），避免目录下存在 `package.json` 且 `"type": "module"` 时被当作 ESM 加载
+- `plugin.d.ts`（类型声明）与外部插件 SDK（`eyou_sdk.js` / `eyou_sdk.py`）由客户端「开发工具」→「创建插件」创建项目时**自动生成**，无需手动创建
+
+> **TODO（待补充）**：插件打包 / 上传商店的规范（zip 目录结构、入口文件位置等）。
 
 ---
 
@@ -66,8 +69,7 @@ plugins/{pluginId}/
 
   "shortcuts": [
     { "id": "f5-refresh", "key": "F5", "command": "reload", "scope": "window" },
-    { "id": "f12-devtools", "key": "F12", "command": "toggleDevTools", "scope": "window" },
-    { "id": "ctrl-h-focus", "key": "H", "modifiers": ["control"], "command": "focusWindow", "scope": "global" }
+    { "id": "f12-devtools", "key": "F12", "command": "toggleDevTools", "scope": "window" }
   ]
 }
 ```
@@ -102,13 +104,17 @@ plugins/{pluginId}/
 |------|------|------|
 | `id` | string | 页面标识（`ctx.ui.openPage(pageId)` 的参数） |
 | `title` | string | 窗口标题 |
-| `entry` | string | 页面入口：本地路径（`"dist/index.html"`）或 URL（`"http://localhost:5173/"`） |
+| `entry` | string | 页面入口：本地路径（`"dist/index.html"`）或 URL（`"http://localhost:5173/"`）。宿主只负责把该 HTML 文件加载进插件窗口，UI 如何开发完全自由（见下方说明） |
 | `window.width` | int? | 窗口宽度 |
 | `window.height` | int? | 窗口高度 |
 | `window.resizable` | bool? | 是否可调整大小 |
 | `window.alwaysOnTop` | bool? | 是否置顶 |
 | `window.icon` | string? | 窗口图标（相对插件目录） |
 | `menu` | array? | 窗口级菜单 |
+
+> **UI 开发方式自由**：`entry` 指向的 HTML 文件可以是任意前端工具（Vite 等）的构建产物、直接手写的静态页，也可以是远程 URL（如本地 dev server），宿主不关心 UI 如何开发。UI 内通过预加载脚本暴露的 `window.$xxx` API 与宿主通信（见 §6）。
+
+> **TODO（待补充）**：开发工具生成的 `plugin.d.ts` 中 `type` 为 `"magic" | "plugin"`、menu 节点含 `accelerator` / `role` / `checked` 等字段，与本文档字段说明不完全一致，待统一（以实际行为为准）。
 
 #### menu（插件级与窗口级通用）
 
@@ -190,6 +196,8 @@ module.exports = {
 | `reload` | `ctx.ui.reload(payload.windowId)` |
 | `toggleDevTools` | `ctx.ui.toggleDevTools(payload.windowId)` |
 
+> `payload.windowId` 由宿主**自动注入**：命令与插件窗口绑定时（如 `scope: "window"` 的快捷键、窗口级菜单项），宿主会自动把当前窗口 id 填入 `payload`，无需手动传参；无窗口上下文时 `payload.windowId` 为 `undefined`。
+
 插件若自行定义了同名命令，以插件实现为准。
 
 ---
@@ -218,8 +226,10 @@ module.exports = {
 
 宿主 spawn 进程时传入网关连接参数：`--port` / `--id` / `--token` / `--dir`。进程连接网关后完成 hello → auth（一次性 token）→ 即可使用完整游戏 API。
 
-- **Node**：`eyou_sdk.js` + `eyou_sdk.d.ts`（`plugin-packer/templates/node/`）
-- **Python**：`eyou_sdk.py`（`plugin-packer/templates/python/`）
+- **Node**：`eyou_sdk.js` + `eyou_sdk.d.ts`
+- **Python**：`eyou_sdk.py`
+
+SDK 由客户端「开发工具」→「创建插件」创建外部插件项目时**自动生成**到项目目录，无需手动获取。
 
 Node SDK 基本用法：
 
@@ -433,7 +443,9 @@ await ctx.storage.set("myKey", { foo: 42 });
 
 ## 6. 前端 API（window.$xxx）
 
-插件 UI 页面（`ctx.ui.openPage` 打开的窗口）通过预加载暴露的 API 与宿主通信。
+插件 UI 页面（`ctx.ui.openPage` 打开的窗口）通过预加载脚本暴露的 API 与宿主通信。
+
+> **TODO（待补充）**：UI 页面与主进程插件逻辑之间的通信接口（如调用插件命令等）将在预加载脚本中补充暴露，届时在此补充说明。
 
 ### 6.1 $plugin
 
@@ -553,6 +565,8 @@ module.exports = {
 
 ### 7.2 带 UI 的插件（Vite 前端）
 
+> UI 开发方式自由：`entry` 指向的 HTML 可以是 Vite 等工具的构建产物（本示例）、直接手写的静态页，或远程 URL（如本地 dev server），宿主只负责把该文件加载进插件窗口。
+
 **manifest.json**（ui 入口指向构建产物）：
 ```json
 {
@@ -646,8 +660,8 @@ module.exports = {
 4. **`ctx.storage` 持久化**：串行化安全写入，自动 JSON 序列化；UI 里用 `window.$storage`
 5. **快捷键用顶层 `shortcuts[]`**：F5 刷新 / F12 DevTools 用内置命令 `reload` / `toggleDevTools`，无需自行实现
 6. **劫持必须 `ack`**：`streamOpen` 劫持模式下，每条封包都要调用 `stream.ack(seq, action)`，否则 DLL 超时自动放行
-7. **外部插件用 SDK**：Node/Python 插件从 `plugin-packer/templates/` 复制 `eyou_sdk`，宿主已处理网关连接与鉴权
+7. **外部插件用 SDK**：Node/Python 插件创建项目时开发工具自动生成 `eyou_sdk`，宿主已处理网关连接与鉴权
 8. **入口用 `.cjs`**：避免目录内 `package.json` 的 `"type": "module"` 把 CommonJS 入口误当 ESM
-9. **类型提示**：把 `plugin.d.ts` 放到插件目录，入口顶部 `/// <reference path="./plugin.d.ts" />`，配合 JSDoc `@param {PluginContext}` 获得代码提示
-10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node），含 `plugin.d.ts`
+9. **类型提示**：开发工具创建项目时自动生成 `plugin.d.ts`，入口顶部 `/// <reference path="./plugin.d.ts" />`，配合 JSDoc `@param {PluginContext}` 获得代码提示
+10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node），自动生成 `plugin.d.ts` 类型声明与外部插件 SDK
 11. **热重载**：在「本地插件」面板点「重载」即可热加载，无需重启客户端

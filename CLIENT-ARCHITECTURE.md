@@ -1,4 +1,4 @@
-﻿# 客户端架构文档
+# 客户端架构文档
 
 > seer_eyou_client — Electron 桌面客户端，易游插件管理器的主进程。管理插件生命周期、窗口、菜单，通过 TCP 3000 与 DLL 通信，通过日志总线统一收集日志。
 
@@ -264,6 +264,8 @@ class SeerWindow {
 ### 4.5 预加载脚本（`src/preload.ts`）
 
 通过 `contextBridge.exposeInMainWorld` 暴露 6 个 API 到渲染进程：
+
+> **TODO（待补充）**：此处声称暴露 6 个 API，下表仅列出 5 个（预加载子模块含 `auth.ts`，疑似第 6 个为 `$auth`），待核对补充。
 
 | API | 暴露方式 | 用途 |
 |-----|---------|------|
