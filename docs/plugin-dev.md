@@ -16,7 +16,7 @@ plugins/{pluginId}/
     └── assets/
 ```
 
-- `{pluginId}` 采用反向域名格式，如 `com.lx.packet_hijacker`；以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..`（安装/加载侧会校验，防路径穿越）
+- `{pluginId}` 采用反向域名格式，如 `com.lx.packet_hijacker`；以字母/数字开头，仅含字母/数字/点/下划线/短横线
 - `manifest.json` **必填**（缺失则加载失败）；`index.cjs` 提供 `lifecycle` / `commands`
 - `ui` / `menu` / `shortcuts` 等配置项**只能在 `manifest.json` 中声明**；入口文件（`index.cjs`）只实现代码逻辑（`lifecycle` / `commands`），不声明配置
 - 推荐入口文件使用 `index.cjs` 扩展名（CommonJS），避免目录下存在 `package.json` 且 `"type": "module"` 时被当作 ESM 加载
@@ -81,7 +81,7 @@ plugins/{pluginId}/
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 全局唯一标识，如 `com.author.name`。以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..` |
+| `id` | string | 全局唯一标识，如 `com.author.name`。以字母/数字开头，仅含字母/数字/点/下划线/短横线 |
 | `name` | string | 显示名称 |
 | `version` | string | 语义化版本号 |
 
@@ -466,15 +466,13 @@ await ctx.storage.set("myKey", { foo: 42 });
 
 插件 UI 页面（`ctx.ui.openPage` 打开的窗口）通过预加载脚本暴露的 API 与宿主通信。插件 UI 可直接访问以下与插件开发相关的能力：
 
-| API | 能力 | 与主进程的关系 |
-|-----|------|---------------|
-| `$game` | 游戏通信：命令 / 订阅 / 监听劫持流 / 状态 / 封包工具 | IPC 桥接到宿主 GameClient，与插件 `ctx.game` 同一套能力 |
-| `$storage` | 插件存储读写 | 与主进程 `ctx.storage` 读写**同一个文件**（`plugins/.storage/{pluginId}.json`），可跨进程共享数据 |
-| `$log` | 日志中心读写 / 订阅推送 | IPC → 主进程 LogBus，日志带窗口所属插件 id 前缀 |
+| API | 能力 |
+|-----|------|
+| `$game` | 游戏通信：命令 / 订阅 / 监听劫持流 / 状态 / 封包工具（与插件 `ctx.game` 同一套能力） |
+| `$storage` | 插件自己的 key-value 序列化存储（自动 JSON 序列化），用于页面数据持久化 |
+| `$log` | 日志读写 / 订阅推送，与 `ctx.log` 路由到同一日志中心 |
 
 > 注：`window.$xxx` 中的其余 API（插件安装管理、游戏路径 / Mod 注入等）为客户端**主界面**使用，插件开发者无需使用。
-
-- 每个方法都是一次 `ipcRenderer.invoke/send` 桥接到主进程；`$game.packPacket` / `unpackPacket` 为本地纯函数
 
 ### 6.1 $game
 
@@ -508,15 +506,14 @@ window.$game.unpackPacket(hex);
 
 ### 6.2 $storage
 
-插件上下文存储的渲染侧等价物（与 `ctx.storage` **同一个文件** `plugins/.storage/{pluginId}.json`，UI 与主进程可借此共享数据）：
+插件自己的 key-value 序列化存储，用于插件页面数据持久化（自动 JSON 序列化、串行化写入）：
 
 ```ts
 const val = await window.$storage.get("key");   // key 不存在时返回 undefined
 await window.$storage.set("key", value);        // 自动 JSON 序列化
 ```
 
-- 写入串行化（与 `ctx.storage` 一致），避免 read-modify-write 竞态
-- `pluginId` 来自窗口启动参数 `--pluginId`（宿主打开页面时自动注入）
+- 存储由插件自己控制，与主进程无关
 
 ### 6.3 $log
 
@@ -529,7 +526,7 @@ window.$log.error("message");
 window.$log.clear();
 ```
 
-- 日志经 IPC 转发到主进程 LogBus，自动带窗口所属插件 id 前缀，与 `ctx.log` 路由到同一日志中心
+- 日志自动带插件 id 前缀，与 `ctx.log` 路由到同一日志中心（客户端「日志」页可查看）
 
 ---
 
@@ -668,5 +665,5 @@ module.exports = {
 9. **类型提示**：入口函数用 JSDoc 标注 `@param {PluginContext}`，配合开发工具自动生成的类型声明获得代码提示
 10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node）与外部插件 SDK
 11. **热重载**：在「本地插件」面板点「重载」即可热加载，无需重启客户端
-12. **插件 id 命名**：以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..`
+12. **插件 id 命名**：以字母/数字开头，仅含字母/数字/点/下划线/短横线
 13. **打包交给开发工具**：插件打包由客户端「开发工具」自动完成，无需手动打 zip
