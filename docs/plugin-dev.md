@@ -16,13 +16,14 @@ plugins/{pluginId}/
     └── assets/
 ```
 
-- `{pluginId}` 采用反向域名格式，如 `com.lx.packet_hijacker`
+- `{pluginId}` 采用反向域名格式，如 `com.lx.packet_hijacker`；以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..`（安装/加载侧会校验，防路径穿越）
 - `manifest.json` **必填**（缺失则加载失败）；`index.cjs` 提供 `lifecycle` / `commands`
 - `ui` / `menu` / `shortcuts` 等配置项**只能在 `manifest.json` 中声明**；入口文件（`index.cjs`）只实现代码逻辑（`lifecycle` / `commands`），不声明配置
 - 推荐入口文件使用 `index.cjs` 扩展名（CommonJS），避免目录下存在 `package.json` 且 `"type": "module"` 时被当作 ESM 加载
 - 外部插件 SDK（`eyou_sdk.js` / `eyou_sdk.py`）由客户端「开发工具」→「创建插件」创建项目时**自动生成**，无需手动获取
+- 运行时插件目录为 `userData/plugins/`（Windows：`%APPDATA%\eyou\plugins\`，开发与打包一致）；开发阶段也可通过「开发工具」注册任意外部目录作为开发插件
 
-> 插件打包由客户端「开发工具」自动完成，无需手动打包。**TODO（待补充）**：打包 / 上传的具体操作说明。
+> 插件打包由客户端「开发工具」的打包功能自动完成（无需手动打 zip）。**TODO（待补充）**：打包 / 上传商店的具体操作说明。
 
 ---
 
@@ -80,7 +81,7 @@ plugins/{pluginId}/
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 全局唯一标识，如 `com.author.name`（仅允许字母/数字/点/下划线/短横线） |
+| `id` | string | 全局唯一标识，如 `com.author.name`。以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..` |
 | `name` | string | 显示名称 |
 | `version` | string | 语义化版本号 |
 
@@ -95,7 +96,7 @@ plugins/{pluginId}/
 | `entry` | string | `"index.js"` | 内部插件 JS 入口文件名；外部插件不需要 |
 | `command` | string | — | **外部插件**：完整命令行，如 `"python main.py"` / `"node main.js"`。存在则跳过 JS 入口加载 |
 | `hideWindow` | bool | 开发隐藏/打包显示 | 外部插件进程是否隐藏控制台窗口；默认：开发环境隐藏、打包环境显示 |
-| `priority` | int | `20` | 菜单排序优先级（越大越靠前） |
+| `priority` | int | `20` | 菜单排序优先级（越大越靠前）；onLoad / onEnable 的触发顺序与之相反（数字越小越先） |
 | `dependencies` | string[] | `[]` | 依赖的其他插件 ID 列表 |
 
 #### ui.pages
@@ -113,6 +114,12 @@ plugins/{pluginId}/
 | `menu` | array? | 窗口级菜单 |
 
 > **UI 开发方式自由**：`entry` 指向的 HTML 文件可以是任意前端工具（Vite 等）的构建产物、直接手写的静态页，也可以是远程 URL（如本地 dev server），宿主不关心 UI 如何开发。UI 内通过预加载脚本暴露的 `window.$xxx` API 与宿主通信（见 §6）。
+>
+> 补充说明：
+> - 窗口标题取 `window.title`，未指定时用页面 `title`
+> - 同一插件的同一 `pageId` 重复调用 `ctx.ui.openPage` 会聚焦已有窗口，**不会新建**
+> - `pageId` 未在 manifest 的 `ui.pages` 声明时，`openPage` 会抛错
+> - 窗口启动参数含 `--pluginId` / `--pluginDir`，UI 侧 `$storage` / `$log` 据此定位插件上下文
 
 #### menu（插件级与窗口级通用）
 
@@ -194,7 +201,10 @@ module.exports = {
 | `reload` | `ctx.ui.reload(payload.windowId)` |
 | `toggleDevTools` | `ctx.ui.toggleDevTools(payload.windowId)` |
 
-> `payload.windowId` 由宿主**自动注入**：命令与插件窗口绑定时（如 `scope: "window"` 的快捷键、窗口级菜单项），宿主会自动把当前窗口 id 填入 `payload`，无需手动传参；无窗口上下文时 `payload.windowId` 为 `undefined`。
+> `payload.windowId` 由宿主**自动注入**，无需手动传参：
+> - 窗口级快捷键（`scope: "window"`）触发时注入 `{ windowId, key, modifiers }`
+> - 窗口级菜单（`ui.pages[].menu`）点击时注入 `{ windowId }`（与声明的 `payload` 合并）
+> - 全局快捷键（`scope: "global"`）与插件级菜单（`menu`）**不注入** `windowId`
 
 插件若自行定义了同名命令，以插件实现为准。
 
@@ -218,7 +228,8 @@ module.exports = {
 ```
 
 - `command` 是完整命令行，支持引号包裹含空格的路径（如 `"C:\\Python\\python.exe" main.py`）
-- `hideWindow`：打包环境下默认**显示**黑色控制台窗口（便于观察日志），开发环境默认隐藏；可显式覆盖
+- `hideWindow`（默认：开发环境隐藏、打包环境显示）：`false` 时打包环境（宿主是无控制台的 GUI 进程）下 Windows 会为插件新建一个黑色控制台窗口；开发环境则挂到宿主控制台不弹新窗口。插件 stdout/stderr 始终走管道进入宿主日志中心，控制台窗口内不显示日志
+- 启动参数除 §4.2 的 `--port` / `--id` / `--token` / `--dir` 外，`hideWindow: false` 时追加 `--console=1`
 
 ### 4.2 SDK
 
@@ -228,6 +239,8 @@ module.exports = {
 - **Python**：`eyou_sdk.py`
 
 SDK 由客户端「开发工具」→「创建插件」创建外部插件项目时**自动生成**到项目目录，无需手动获取。
+
+外部插件的生命周期钩子（onEnable / onDisable / onOpen / onDaily 等）由宿主通过 `system.lifecycle` 命令下发，SDK 自动映射为回调；插件在 hello 握手时向宿主声明已实现的阶段（UI 据此显示"打开"按钮）。
 
 Node SDK 基本用法：
 
@@ -287,7 +300,7 @@ ctx.log.error(...args);
 
 ```ts
 type GameAPI = {
-  whenReady(timeout?): Promise<boolean>;   // 等待连接就绪（hello+auth 完成）；就绪 true，超时 false
+  whenReady(timeout?): Promise<boolean>;   // 等待连接就绪（hello+auth 完成）；默认无限等待，传 timeout 超时返回 false
   onClosed(cb): () => void;                // 连接从 ready 掉线（重连前间隙）
   onReady(cb): () => void;                 // 每次就绪（含重连）触发，返回取消函数
   readonly status: "idle" | "connecting" | "ready" | "closed";
@@ -299,6 +312,10 @@ type GameAPI = {
 
 type Result<T = any> = { ok: boolean; value: T | null; error: { code: string; message: string } | null };
 ```
+
+- 连接状态机：`idle` → `connecting` → `ready`（hello + auth 通过）→ `closed`
+- `req` 默认超时 30 秒；`whenReady` 默认无限等待（直到鉴权成功）
+- 多订阅者：`req` 有本地订阅者时**并发调用全部**，返回第一个成功订阅者的返回值（哪怕 undefined）；全部失败则返回 `ok=false`（`INTERNAL`）
 
 #### 订阅事件（DLL 推送）
 
@@ -417,6 +434,12 @@ ctx.ui.toggleDevTools(windowId);
 ctx.ui.setAlwaysOnTop(windowId, true);
 ctx.ui.setMenu(windowId, nodes);          // 动态设置窗口菜单
 ctx.ui.getWindow(windowId);               // 获取 SeerWindow 实例（Electron API 级）
+
+// 行为说明：
+// - 同一插件的同一 pageId 重复 openPage 会聚焦已有窗口，不新建
+// - 窗口标题取 window.title，未指定时用页面 title
+// - pageId 未在 manifest 声明时 openPage 抛错
+// - 窗口启动参数含 --pluginId / --pluginDir，UI 侧 $storage / $log 据此定位插件上下文
 ```
 
 ### 5.6 menu
@@ -445,6 +468,8 @@ await ctx.storage.set("myKey", { foo: 42 });
 
 > **TODO（待补充）**：UI 页面与主进程插件逻辑之间的通信接口（如调用插件命令等）将在预加载脚本中补充暴露，届时在此补充说明。
 
+> 注意：UI 使用 `$game`（查询状态 / 订阅 / 开流 / 发命令）前，需先由前端登录流程取得 gameToken 并经 `$auth.setToken` 传入宿主（见 6.6）；宿主不持久化 token，重启后需重新登录再传。
+
 ### 6.1 $plugin
 
 ```ts
@@ -469,6 +494,15 @@ await window.$plugin.installBuiltin(id);                       // 安装单个�
 // 日常任务
 const tasks = await window.$plugin.getDailyTasks();
 await window.$plugin.saveDailyTasks([...]);
+await window.$plugin.runDaily(id);   // 手动触发插件 onDaily
+
+// 开发工具：创建 / 打包
+await window.$plugin.createPlugin({ type: "node" });  // 创建插件项目（弹窗选择目录）
+const { zipPath } = await window.$plugin.packPlugin(); // 打包当前选中项目为 zip
+
+// 开发插件注册 / 重载（开发阶段用）
+await window.$plugin.addDevPlugin();      // 选择外部目录注册为开发插件
+await window.$plugin.reloadDevPlugin(id); // 强制热重载
 ```
 
 ### 6.2 $game
@@ -497,6 +531,9 @@ window.$game.unpackPacket(hex);
 ```
 
 > 提示：React 中把 `$game` 存到 `useRef`，避免闭包捕获旧值。
+>
+> `whenReady()` 默认无限等待（直到 `$auth.setToken` → 连接 → 鉴权成功）；传 timeout 超时返回 false。
+> `streamOpen` 打开失败时（`ok=false`）会直接 throw Error。
 
 ### 6.3 $storage
 
@@ -528,6 +565,18 @@ await window.$settings.injectMod();
 await window.$settings.restoreMod();
 const { injected } = window.$settings.checkModStatus();
 ```
+
+### 6.6 $auth（游戏鉴权）
+
+```ts
+// 前端登录（或本地缓存自动登录）后把 gameToken 传给宿主；未连接时自动触发连接
+const { ok } = await window.$auth.setToken(gameToken);
+// 传空串 = 退出登录（清空 token 并断开）
+await window.$auth.setToken("");
+```
+
+- gameToken 由插件管理器后端登录接口颁发（JWT），宿主用它向 DLL 完成 auth
+- 宿主**不持久化** token：客户端重启后需由 UI 重新登录并再次调用 `$auth.setToken`，之后 `$game` 才能就绪
 
 ---
 
@@ -656,10 +705,13 @@ module.exports = {
 2. **`ctx.ui.openPage("home")` 统一入口**：插件打开窗口的唯一方式
 3. **`ctx.log` 记日志**：不要用 `console.log`，否则不会路由到日志中心
 4. **`ctx.storage` 持久化**：串行化安全写入，自动 JSON 序列化；UI 里用 `window.$storage`
-5. **快捷键用顶层 `shortcuts[]`**：F5 刷新 / F12 DevTools 用内置命令 `reload` / `toggleDevTools`，无需自行实现
+5. **快捷键用顶层 `shortcuts[]`**：F5 刷新 / F12 DevTools 用内置命令 `reload` / `toggleDevTools`，无需自行实现；窗口级快捷键 / 窗口级菜单命令会自动注入 `windowId`
 6. **劫持必须 `ack`**：`streamOpen` 劫持模式下，每条封包都要调用 `stream.ack(seq, action)`，否则 DLL 超时自动放行
 7. **外部插件用 SDK**：Node/Python 插件创建项目时开发工具自动生成 `eyou_sdk`，宿主已处理网关连接与鉴权
 8. **入口用 `.cjs`**：避免目录内 `package.json` 的 `"type": "module"` 把 CommonJS 入口误当 ESM
 9. **类型提示**：入口函数用 JSDoc 标注 `@param {PluginContext}`，配合开发工具自动生成的类型声明获得代码提示
 10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node）与外部插件 SDK
 11. **热重载**：在「本地插件」面板点「重载」即可热加载，无需重启客户端
+12. **UI 用 `$game` 前先鉴权**：前端登录后调用 `window.$auth.setToken(gameToken)`；宿主不持久化 token，重启后需重新登录再传
+13. **插件 id 命名**：以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..`
+14. **打包交给开发工具**：插件打包由客户端「开发工具」自动完成，无需手动打 zip
