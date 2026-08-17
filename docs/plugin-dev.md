@@ -18,11 +18,11 @@ plugins/{pluginId}/
 
 - `{pluginId}` 采用反向域名格式，如 `com.lx.packet_hijacker`
 - `manifest.json` **必填**（缺失则加载失败）；`index.cjs` 提供 `lifecycle` / `commands`
-- `ui` / `menu` / `shortcuts` 可在 manifest 与入口文件中同时声明，**manifest.json 优先**
+- `ui` / `menu` / `shortcuts` 等配置项**只能在 `manifest.json` 中声明**；入口文件（`index.cjs`）只实现代码逻辑（`lifecycle` / `commands`），不声明配置
 - 推荐入口文件使用 `index.cjs` 扩展名（CommonJS），避免目录下存在 `package.json` 且 `"type": "module"` 时被当作 ESM 加载
-- `plugin.d.ts`（类型声明）与外部插件 SDK（`eyou_sdk.js` / `eyou_sdk.py`）由客户端「开发工具」→「创建插件」创建项目时**自动生成**，无需手动创建
+- 外部插件 SDK（`eyou_sdk.js` / `eyou_sdk.py`）由客户端「开发工具」→「创建插件」创建项目时**自动生成**，无需手动获取
 
-> **TODO（待补充）**：插件打包 / 上传商店的规范（zip 目录结构、入口文件位置等）。
+> 插件打包由客户端「开发工具」自动完成，无需手动打包。**TODO（待补充）**：打包 / 上传的具体操作说明。
 
 ---
 
@@ -113,8 +113,6 @@ plugins/{pluginId}/
 | `menu` | array? | 窗口级菜单 |
 
 > **UI 开发方式自由**：`entry` 指向的 HTML 文件可以是任意前端工具（Vite 等）的构建产物、直接手写的静态页，也可以是远程 URL（如本地 dev server），宿主不关心 UI 如何开发。UI 内通过预加载脚本暴露的 `window.$xxx` API 与宿主通信（见 §6）。
-
-> **TODO（待补充）**：开发工具生成的 `plugin.d.ts` 中 `type` 为 `"magic" | "plugin"`、menu 节点含 `accelerator` / `role` / `checked` 等字段，与本文档字段说明不完全一致，待统一（以实际行为为准）。
 
 #### menu（插件级与窗口级通用）
 
@@ -654,7 +652,7 @@ module.exports = {
 
 ## 8. 最佳实践
 
-1. **manifest.json 优先**：ui/menu/shortcuts 在 manifest.json 中声明，入口文件只写运行时逻辑
+1. **配置只在 manifest.json**：ui/menu/shortcuts 等配置项只能在 manifest.json 中声明，入口文件只写运行时逻辑（lifecycle / commands）
 2. **`ctx.ui.openPage("home")` 统一入口**：插件打开窗口的唯一方式
 3. **`ctx.log` 记日志**：不要用 `console.log`，否则不会路由到日志中心
 4. **`ctx.storage` 持久化**：串行化安全写入，自动 JSON 序列化；UI 里用 `window.$storage`
@@ -662,6 +660,6 @@ module.exports = {
 6. **劫持必须 `ack`**：`streamOpen` 劫持模式下，每条封包都要调用 `stream.ack(seq, action)`，否则 DLL 超时自动放行
 7. **外部插件用 SDK**：Node/Python 插件创建项目时开发工具自动生成 `eyou_sdk`，宿主已处理网关连接与鉴权
 8. **入口用 `.cjs`**：避免目录内 `package.json` 的 `"type": "module"` 把 CommonJS 入口误当 ESM
-9. **类型提示**：开发工具创建项目时自动生成 `plugin.d.ts`，入口顶部 `/// <reference path="./plugin.d.ts" />`，配合 JSDoc `@param {PluginContext}` 获得代码提示
-10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node），自动生成 `plugin.d.ts` 类型声明与外部插件 SDK
+9. **类型提示**：入口函数用 JSDoc 标注 `@param {PluginContext}`，配合开发工具自动生成的类型声明获得代码提示
+10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node）与外部插件 SDK
 11. **热重载**：在「本地插件」面板点「重载」即可热加载，无需重启客户端

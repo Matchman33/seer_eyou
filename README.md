@@ -23,7 +23,6 @@
 ## 📖 文档
 
 - [插件开发指南](docs/plugin-dev.md) — 如何开发一个插件
-- [客户端架构](CLIENT-ARCHITECTURE.md) — 项目架构说明
 
 ## 🛠 技术栈
 
