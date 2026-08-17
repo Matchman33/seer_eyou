@@ -96,7 +96,7 @@ plugins/{pluginId}/
 | `entry` | string | `"index.js"` | 内部插件 JS 入口文件名；外部插件不需要 |
 | `command` | string | — | **外部插件**：完整命令行，如 `"python main.py"` / `"node main.js"`。存在则跳过 JS 入口加载 |
 | `hideWindow` | bool | 开发隐藏/打包显示 | 外部插件进程是否隐藏控制台窗口；默认：开发环境隐藏、打包环境显示 |
-| `priority` | int | `20` | 菜单排序优先级（越大越靠前） |
+| `priority` | int | `20` | 插件加载顺序（越大越优先加载；菜单排序亦越大越靠前） |
 | `dependencies` | string[] | `[]` | 依赖的其他插件 ID 列表 |
 
 #### ui.pages
@@ -113,7 +113,7 @@ plugins/{pluginId}/
 | `window.icon` | string? | 窗口图标（相对插件目录） |
 | `menu` | array? | 窗口级菜单 |
 
-> **UI 开发方式自由**：`entry` 指向的 HTML 文件可以是任意前端工具（Vite 等）的构建产物、直接手写的静态页，也可以是远程 URL（如本地 dev server），宿主不关心 UI 如何开发。UI 内通过预加载脚本暴露的 `window.$xxx` API 与宿主通信（见 §6）。
+> **UI 开发方式自由**：`entry` 指向的 HTML 文件可以是任意前端工具（Vite 等）的构建产物、直接手写的静态页，也可以是远程 URL（如本地 dev server），宿主不关心 UI 如何开发。UI 内通过预加载脚本暴露的 `window.$xxx` API 与宿主通信（见 [§6](#6-前端-apiwindowxxx)）。
 >
 > 补充说明：
 > - 窗口标题取 `window.title`，未指定时用页面 `title`
@@ -229,7 +229,7 @@ module.exports = {
 
 - `command` 是完整命令行，支持引号包裹含空格的路径（如 `"C:\\Python\\python.exe" main.py`）
 - `hideWindow`（默认：开发环境隐藏、打包环境显示）：`false` 时打包环境（宿主是无控制台的 GUI 进程）下 Windows 会为插件新建一个黑色控制台窗口；开发环境则挂到宿主控制台不弹新窗口。插件 stdout/stderr 始终走管道进入宿主日志中心，控制台窗口内不显示日志
-- 启动参数除 §4.2 的 `--port` / `--id` / `--token` / `--dir` 外，`hideWindow: false` 时追加 `--console=1`
+- 启动参数除 [§4.2](#42-sdk) 的 `--port` / `--id` / `--token` / `--dir` 外，`hideWindow: false` 时追加 `--console=1`
 
 ### 4.2 SDK
 
