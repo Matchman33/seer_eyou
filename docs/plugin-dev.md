@@ -23,7 +23,7 @@ plugins/{pluginId}/
 - 外部插件 SDK（`eyou_sdk.js` / `eyou_sdk.py`）由客户端「开发工具」→「创建插件」创建项目时**自动生成**，无需手动获取
 - 运行时插件目录为 `userData/plugins/`（Windows：`%APPDATA%\eyou\plugins\`，开发与打包一致）；开发阶段也可通过「开发工具」注册任意外部目录作为开发插件
 
-> 插件打包由客户端「开发工具」的打包功能自动完成（无需手动打 zip）。**TODO（待补充）**：打包 / 上传商店的具体操作说明。
+> 插件打包由客户端「开发工具」的打包功能自动完成（无需手动打 zip）。
 
 ---
 
@@ -96,7 +96,7 @@ plugins/{pluginId}/
 | `entry` | string | `"index.js"` | 内部插件 JS 入口文件名；外部插件不需要 |
 | `command` | string | — | **外部插件**：完整命令行，如 `"python main.py"` / `"node main.js"`。存在则跳过 JS 入口加载 |
 | `hideWindow` | bool | 开发隐藏/打包显示 | 外部插件进程是否隐藏控制台窗口；默认：开发环境隐藏、打包环境显示 |
-| `priority` | int | `20` | 菜单排序优先级（越大越靠前）；onLoad / onEnable 的触发顺序与之相反（数字越小越先） |
+| `priority` | int | `20` | 菜单排序优先级（越大越靠前） |
 | `dependencies` | string[] | `[]` | 依赖的其他插件 ID 列表 |
 
 #### ui.pages
@@ -466,10 +466,6 @@ await ctx.storage.set("myKey", { foo: 42 });
 
 插件 UI 页面（`ctx.ui.openPage` 打开的窗口）通过预加载脚本暴露的 API 与宿主通信。
 
-> **TODO（待补充）**：UI 页面与主进程插件逻辑之间的通信接口（如调用插件命令等）将在预加载脚本中补充暴露，届时在此补充说明。
-
-> 注意：UI 使用 `$game`（查询状态 / 订阅 / 开流 / 发命令）前，需先由前端登录流程取得 gameToken 并经 `$auth.setToken` 传入宿主（见 6.6）；宿主不持久化 token，重启后需重新登录再传。
-
 ### 6.1 $plugin
 
 ```ts
@@ -532,7 +528,7 @@ window.$game.unpackPacket(hex);
 
 > 提示：React 中把 `$game` 存到 `useRef`，避免闭包捕获旧值。
 >
-> `whenReady()` 默认无限等待（直到 `$auth.setToken` → 连接 → 鉴权成功）；传 timeout 超时返回 false。
+> `whenReady()` 默认无限等待（直到游戏连接就绪），传 timeout 超时返回 false。
 > `streamOpen` 打开失败时（`ok=false`）会直接 throw Error。
 
 ### 6.3 $storage
@@ -565,18 +561,6 @@ await window.$settings.injectMod();
 await window.$settings.restoreMod();
 const { injected } = window.$settings.checkModStatus();
 ```
-
-### 6.6 $auth（游戏鉴权）
-
-```ts
-// 前端登录（或本地缓存自动登录）后把 gameToken 传给宿主；未连接时自动触发连接
-const { ok } = await window.$auth.setToken(gameToken);
-// 传空串 = 退出登录（清空 token 并断开）
-await window.$auth.setToken("");
-```
-
-- gameToken 由插件管理器后端登录接口颁发（JWT），宿主用它向 DLL 完成 auth
-- 宿主**不持久化** token：客户端重启后需由 UI 重新登录并再次调用 `$auth.setToken`，之后 `$game` 才能就绪
 
 ---
 
@@ -712,6 +696,5 @@ module.exports = {
 9. **类型提示**：入口函数用 JSDoc 标注 `@param {PluginContext}`，配合开发工具自动生成的类型声明获得代码提示
 10. **脚手架**：客户端「开发工具」→「创建插件」可生成插件骨架（内部 JS / 外部 Python / 外部 Node）与外部插件 SDK
 11. **热重载**：在「本地插件」面板点「重载」即可热加载，无需重启客户端
-12. **UI 用 `$game` 前先鉴权**：前端登录后调用 `window.$auth.setToken(gameToken)`；宿主不持久化 token，重启后需重新登录再传
-13. **插件 id 命名**：以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..`
-14. **打包交给开发工具**：插件打包由客户端「开发工具」自动完成，无需手动打 zip
+12. **插件 id 命名**：以字母/数字开头，仅含字母/数字/点/下划线/短横线，长度 ≤128，禁止 `..`
+13. **打包交给开发工具**：插件打包由客户端「开发工具」自动完成，无需手动打 zip
