@@ -464,7 +464,18 @@ await ctx.storage.set("myKey", { foo: 42 });
 
 ## 6. 前端 API（window.$xxx）
 
-插件 UI 页面（`ctx.ui.openPage` 打开的窗口）通过预加载脚本暴露的 API 与宿主通信。
+插件 UI 页面（`ctx.ui.openPage` 打开的窗口）通过预加载脚本暴露的 API 与宿主通信。预加载脚本对**每个窗口**（插件页面、主界面等）都暴露同一组 `window.$xxx`，插件 UI 可直接访问以下能力：
+
+| API | 能力 | 与主进程的关系 |
+|-----|------|---------------|
+| `$game` | 游戏通信：命令 / 订阅 / 监听劫持流 / 状态 / 封包工具 | IPC 桥接到宿主 GameClient，与插件 `ctx.game` 同一套能力 |
+| `$plugin` | 插件管理：安装 / 启停 / 打开 / 卸载 / 日常任务 / 开发工具 | IPC → 主进程 PluginManager |
+| `$storage` | 插件存储读写 | 与主进程 `ctx.storage` 读写**同一个文件**（`plugins/.storage/{pluginId}.json`），可跨进程共享数据 |
+| `$log` | 日志中心读写 / 订阅推送 | IPC → 主进程 LogBus，日志带窗口所属插件 id 前缀 |
+| `$settings` | 游戏路径 / Mod 注入 / 钩子配置 | 部分直连本地文件 + IPC |
+
+- 每个方法都是一次 `ipcRenderer.invoke/send` 桥接到主进程；`$game.packPacket` / `unpackPacket` 为本地纯函数
+- UI 触发插件逻辑的途径：`$plugin.open(id)` 触发插件 `onOpen`、`$plugin.runDaily(id)` 触发 `onDaily`；需要更复杂的交互时可借助 `$storage` 共享数据（同一存储文件）
 
 ### 6.1 $plugin
 
@@ -474,13 +485,13 @@ const list = await window.$plugin.getInstalled();
 // [{ id, name, version, type, description, author, tags, enabled, dir, hasUi, hasOnOpen, hasOnDaily }]
 
 // 安装 / 管理
-await window.$plugin.installFromUrl("http://...");   // 云端 URL 下载安装
+await window.$plugin.installFromUrl("http://...", token?);  // 云端 URL 下载安装（可选 token）
 await window.$plugin.installFromFile();                // 本地 zip（弹窗选择）
 await window.$plugin.enable(id);
 await window.$plugin.disable(id);
-await window.$plugin.open(id);
+await window.$plugin.open(id);       // 触发插件 onOpen（打开其 UI 或执行打开逻辑）
 await window.$plugin.uninstall(id);
-await window.$plugin.reload(id);
+await window.$plugin.reload(id);     // 热重载
 
 // 内置插件
 const { plugins } = await window.$plugin.getBuiltinPlugins();  // [{ id, name, version, description, available, installed }]
@@ -493,12 +504,17 @@ await window.$plugin.saveDailyTasks([...]);
 await window.$plugin.runDaily(id);   // 手动触发插件 onDaily
 
 // 开发工具：创建 / 打包
-await window.$plugin.createPlugin({ type: "node" });  // 创建插件项目（弹窗选择目录）
-const { zipPath } = await window.$plugin.packPlugin(); // 打包当前选中项目为 zip
+await window.$plugin.createPlugin({ type: "node" });   // 创建插件项目（弹窗选择目录）
+const { zipPath } = await window.$plugin.packPlugin();  // 打包当前选中项目为 zip
+await window.$plugin.packPluginDir(dir);                // 打包指定目录
 
-// 开发插件注册 / 重载（开发阶段用）
-await window.$plugin.addDevPlugin();      // 选择外部目录注册为开发插件
-await window.$plugin.reloadDevPlugin(id); // 强制热重载
+// 开发插件注册 / 管理（开发阶段用）
+const devList = await window.$plugin.getDevPlugins();   // [{ id, dir, name, version, enabled, loaded }]
+await window.$plugin.addDevPlugin();                    // 选择外部目录注册为开发插件
+await window.$plugin.loadDevPlugin(id);                 // 加载并启用已注册的开发插件
+await window.$plugin.reloadDevPlugin(id);               // 强制热重载
+await window.$plugin.removeDevPlugin(id);               // 移除开发插件注册
+await window.$plugin.openDevPluginDir(id);              // 在文件管理器中打开插件目录
 ```
 
 ### 6.2 $game
@@ -533,33 +549,53 @@ window.$game.unpackPacket(hex);
 
 ### 6.3 $storage
 
-插件上下文存储的渲染侧等价物（与 `ctx.storage` 同一存储位置）：
+插件上下文存储的渲染侧等价物（与 `ctx.storage` **同一个文件** `plugins/.storage/{pluginId}.json`，UI 与主进程可借此共享数据）：
 
 ```ts
-const val = await window.$storage.get("key");
-await window.$storage.set("key", value);
+const val = await window.$storage.get("key");   // key 不存在时返回 undefined
+await window.$storage.set("key", value);        // 自动 JSON 序列化
 ```
+
+- 写入串行化（与 `ctx.storage` 一致），避免 read-modify-write 竞态
+- `pluginId` 来自窗口启动参数 `--pluginId`（宿主打开页面时自动注入）
 
 ### 6.4 $log
 
 ```ts
 const entries = await window.$log.getRecent();
-const unsub = window.$log.subscribe((entry) => { ... });
-window.$log.info("message");
+const unsub = window.$log.subscribe((entry) => { ... });   // 订阅实时日志推送，返回退订函数
+window.$log.info("message");   // 单参数字符串
 window.$log.warn("message");
 window.$log.error("message");
 window.$log.clear();
 ```
 
+- 日志经 IPC 转发到主进程 LogBus，自动带窗口所属插件 id 前缀，与 `ctx.log` 路由到同一日志中心
+
 ### 6.5 $settings
 
 ```ts
+// 游戏路径
 const { path, exists } = window.$settings.getDefaultPath();
-const selected = await window.$settings.selectPath();
+const selected = await window.$settings.selectPath();   // 弹窗选择游戏目录
+await window.$settings.detectGamePath();                // 自动检测游戏目录
+const { exists } = window.$settings.checkPath(p);
+await window.$settings.saveGamePath(p);
+
+// 设置向导
+await window.$settings.getSetupStatus();
+await window.$settings.completeSetup(gamePath);
+
+// 游戏启动 / Mod 注入
 await window.$settings.launchGame();
 await window.$settings.injectMod();
 await window.$settings.restoreMod();
 const { injected } = window.$settings.checkModStatus();
+
+// 钩子配置（eyou_config.json：port / debug_log）
+const { path, exists, config } = window.$settings.getHookConfig();
+await window.$settings.saveHookConfig({ debug_log: false, port: 3000 });
+await window.$settings.resetHookConfig();
 ```
 
 ---
