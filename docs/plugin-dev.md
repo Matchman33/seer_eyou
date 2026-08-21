@@ -36,7 +36,6 @@ plugins/{pluginId}/
   "id": "com.lx.my_plugin",
   "name": "我的插件",
   "version": "1.0.0",
-  "type": "plugin",
   "description": "插件描述",
   "author": "lx",
   "tags": ["示例", "工具"],
@@ -89,14 +88,13 @@ plugins/{pluginId}/
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `type` | `"plugin"` | `"plugin"` | 插件类型（仅支持插件） |
 | `description` | string | `""` | 描述文本（不超过 50 字） |
 | `author` | string | `""` | 作者名 |
 | `tags` | string[] | `[]` | 标签列表 |
 | `entry` | string | `"index.js"` | 内部插件 JS 入口文件名；外部插件不需要 |
 | `command` | string | — | **外部插件**：完整命令行，如 `"python main.py"` / `"node main.js"`。存在则跳过 JS 入口加载 |
 | `hideWindow` | bool | 开发隐藏/打包显示 | 外部插件进程是否隐藏控制台窗口；默认：开发环境隐藏、打包环境显示 |
-| `priority` | int | `20` | 插件加载顺序（越大越优先加载；菜单排序亦越大越靠前） |
+| `priority` | int | `20` | 插件加载顺序（越小越优先加载；菜单也越靠前） |
 | `dependencies` | string[] | `[]` | 依赖的其他插件 ID 列表 |
 
 #### ui.pages
@@ -221,7 +219,6 @@ module.exports = {
   "id": "com.lx.my_script",
   "name": "外部脚本插件",
   "version": "1.0.0",
-  "type": "plugin",
   "command": "python main.py",
   "hideWindow": true
 }
@@ -304,18 +301,20 @@ type GameAPI = {
   onClosed(cb): () => void;                // 连接从 ready 掉线（重连前间隙）
   onReady(cb): () => void;                 // 每次就绪（含重连）触发，返回取消函数
   readonly status: "idle" | "connecting" | "ready" | "closed";
-  on(topic, cb): () => void;               // 注册事件订阅者（跨插件多订阅者；game.* 由宿主转发 DLL 推送），返回退订函数
+  on(topic, cb, acl?): () => void;         // 注册订阅者（跨插件多订阅者）；acl 声明哪些插件可调用本处理器；返回退订函数
   off(topic, cb?): void;                   // 退订
-  req(topic, data?, timeout?): Promise<Result>;  // 发布：本地有订阅者→调用全部并返回第一个返回值；否则走 DLL 命令
+  req(topic, data?, timeout?): Promise<Result>;  // 发布：有订阅者→按 acl 调用并返回第一个返回值；无订阅者→仅 DLL 原生命令回退 DLL
   streamOpen(filter, onData?): Promise<PacketStream>; // 打开监听/劫持流
 };
 
 type Result<T = any> = { ok: boolean; value: T | null; error: { code: string; message: string } | null };
+type CallMeta = { callerId: string; topic: string };   // on 处理器第二参
+type OnAcl = { allow?: string[]; deny?: string[] };    // 跨插件访问控制
 ```
 
 - 连接状态机：`idle` → `connecting` → `ready`（hello + auth 通过）→ `closed`
 - `req` 默认超时 30 秒；`whenReady` 默认无限等待（直到鉴权成功）
-- 多订阅者：`req` 有本地订阅者时**并发调用全部**，返回第一个成功订阅者的返回值（哪怕 undefined）；全部失败则返回 `ok=false`（`INTERNAL`）
+- 多订阅者：`req` 有订阅者时按 acl 过滤后**并发调用被允许的全部**，返回第一个成功订阅者的返回值（哪怕 undefined）；全部失败则返回 `ok=false`（`INTERNAL`）；有订阅者但全部被拒绝则返回 `ok=false`（`FORBIDDEN`）
 
 #### 订阅事件（DLL 推送）
 
@@ -340,21 +339,28 @@ type Result<T = any> = { ok: boolean; value: T | null; error: { code: string; me
 `topic` 只是**事件名**，与插件无关。任何插件都能 `on` 同名事件，发布时**全部被调用**（多订阅者模式）：
 
 ```js
-// 插件 A：注册事件处理器（暴露"接口"）
-const unsub = ctx.game.on("someEvent", async (payload) => {
-  // ...处理并返回结果
+// 插件 A：注册事件处理器（暴露"接口"），并声明访问控制（acl）
+const unsub = ctx.game.on("someEvent", async (payload, meta) => {
+  // meta.callerId = 调用方插件 id；meta.topic = 事件名
   return { code: 0, data: payload };
-});
+}, { allow: ["com.lx.plugin_b"], deny: ["com.lx.plugin_c"] });
 
 // 插件 B：发布并获取第一个订阅者的返回值（哪怕 undefined）
 const res = await ctx.game.req("someEvent", { hello: "world" });
 // res.value = 第一个订阅者的返回值（未定义则返回 undefined，ok 仍为 true）
 ```
 
-- `on(topic, handler)`：注册订阅者；`game.*` 前缀是 DLL 事件（宿主自动订阅 DLL 并转发推送）。
-- `req(topic, data)`：先查本地订阅者——有则并发调用全部，返回**第一个订阅者的返回值（哪怕 undefined）**；无订阅者则回退到 DLL 命令（`game.*`）。
+**访问控制（acl）**：`on(topic, handler, acl?)` 的第三参声明哪些插件可以调用本处理器：
+
+- `allow: string[]`：白名单（缺省 = 全部允许）
+- `deny: string[]`：黑名单（优先于 allow）
+- 被拒绝的订阅者会被跳过；若某 topic 有订阅者但**全部拒绝**当前调用方，则 `req` 返回 `ok=false`、`error.code = "FORBIDDEN"`（不会回退 DLL）
+- `handler` 第二参 `meta = { callerId, topic }` 拿到调用方插件 id（用于日志或更细粒度判断；DLL 事件推送时 `callerId` 为空串）
+
+- `on(topic, handler, acl?)`：注册订阅者；DLL 原生事件（`game.packet.recv` / `game.packet.sent` / `game.login` / `game.logout`）由宿主自动订阅 DLL 并转发推送，其余主题为纯插件间事件。
+- `req(topic, data)`：先查订阅者——有则按 acl 过滤后并发调用被允许的全部，返回**第一个订阅者的返回值（哪怕 undefined）**；无订阅者时，仅当 topic 是 DLL 原生命令（`game.status` / `game.packet.send` / `game.speed.set` / `game.refresh`）才回退到 DLL，否则返回 `ok=false`（`UNKNOWN_COMMAND`）。
 - 不 `await` 的 `req` 即"发送不管"（fire-and-forget）。
-- `game.*` 为 DLL 保留命名空间，插件事件请使用非 `game.*` 的事件名（建议 `业务.事件`，如 `command.request`）。
+- 插件间事件请使用非 DLL 主题的事件名（建议 `业务.事件`，如 `command.request`）。
 - **无权限 caps**：auth 通过即可访问插件全部能力，不存在能力限制。
 
 #### command 插件示例（请求-响应接口）
@@ -482,8 +488,8 @@ const res = await window.$game.req("game.status", {}, 3000);   // 统一 Result 
 const status = await window.$game.status();
 await window.$game.whenReady(5000);
 
-// 订阅事件（返回退订函数）
-const unsub = window.$game.on("game.packet.recv", (data) => { ... });
+// 订阅事件（返回退订函数）；与 ctx.game.on 同语义：回调第二参 meta={callerId,topic}，第三参 acl 声明访问控制
+const unsub = window.$game.on("game.packet.recv", (data, meta) => { ... }, { allow: ["com.lx.plugin_b"] });
 window.$game.off("game.packet.recv");
 
 // 连接就绪 / 掉线
@@ -542,7 +548,6 @@ window.$log.clear();
   "id": "com.lx.hello",
   "name": "Hello",
   "version": "1.0.0",
-  "type": "plugin",
   "entry": "index.cjs",
   "menu": [{ "id": "root", "label": "Hello", "command": "sayHello" }]
 }
@@ -612,7 +617,6 @@ window.$log.info("Hello from UI!");
   "id": "com.lx.node_worker",
   "name": "Node 工作进程",
   "version": "1.0.0",
-  "type": "plugin",
   "command": "node main.js",
   "hideWindow": true
 }
